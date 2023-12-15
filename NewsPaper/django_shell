@@ -1,0 +1,108 @@
+python manage.py shell
+
+from news.models import *
+
+1
+ user1 = User.objects.create_user("Анжела")
+user2 = User.objects.create_user("Марина")
+
+2
+author1 = Author.objects.create(author=user1)
+ author2 = Author.objects.create(author=user2)
+
+3
+category1 = Category.objects.create(article_category='Спорт')
+category2=Category.objects.create(article_category="Реклама")
+category3=Category.objects.create(article_category="Погода")
+category4=Category.objects.create(article_category="Стиль")
+
+4
+author = Author.objects.get(id=1)
+>>> Post.objects.create(
+... post_author = author,
+... category = 'A',
+... title = 'The Record',
+... content = 'Long text'
+... )
+<Post: The Record: Long text>
+
+# <Post: Post object (2)>
+>>> Post.objects.create(
+... post_author = author,
+... category = 'A',
+... title = 'The Magic',
+... content = 'Not very long story'
+... )
+<Post: The Magic: Not very long story>
+
+# <Post: Post object (3)>
+>>> Post.objects.create(
+... post_author = author,
+... category = 'N',
+... title = 'Some news',
+... content = 'We have launched a new project'
+... )
+<Post: Some News: We have launched a n>
+
+5
+Post.objects.get(id=1).post_category.add(Category.objects.get(id=1))
+
+6
+Comment.objects.create(
+                      comment_post=Post.objects.get(id=1),
+                      comment_user=Author.objects.get(id=1).author,
+                      feedback_text = 'Very interesting article'
+                      )
+Comment.objects.create(
+                      comment_post=Post.objects.get(id=2),
+                      comment_user = Author.objects.get(id=1).author,
+                      feedback_text = 'It is interesting'
+                      )
+Comment.objects.create(
+                      comment_post = Post.objects.get(id=3),
+                      comment_user = Author.objects.get(id=2).author, feedback_text = "Wow, that's awesome"
+                      )
+Comment.objects.create(
+                      comment_post=Post.objects.get(id=1),
+                      comment_user = Author.objects.get(id=2).author, feedback_text = 'It is okay'
+                      )
+
+7
+Comment.objects.get(id=1).like()
+Post.objects.get(id=1).dislike()
+Post.objects.get(id=3).like()
+проверка рейтинга пользователя
+Comment.objects.get(id=1).comment_rate
+проверка рейтинга поста
+Post.objects.get(id=1).post_rate
+
+8
+user1 = Author.objects.get(id=1)
+user1.update_rating()
+user1.user_rate
+
+ user2 = Author.objects.get(id=2)
+user2.update_rating()
+ user2.user_rate
+
+9
+s = Author.objects.order_by('user_rate')
+for i in s:
+ 	i.user_rate
+	i.author.username
+
+10
+p = Post.objects.order_by('-post_rate')
+for i in p[:1]:
+...     i.date_created
+...     i.post_author.author
+...     i.post_rate
+...     i.title
+...     i.preview()
+
+11
+Post.objects.all().order_by('-post_rate')[0].comment_set.values(
+'comment_date_created',
+'comment_user',
+'comment_rate', 'feedback_text'
+)
