@@ -1,88 +1,111 @@
+from datetime import timezone
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Sum
-from django.template.defaultfilters import truncatewords
+from django.db.models.functions import Coalesce
+from django.urls import reverse
 
 
 class Author(models.Model):
-    user_rate = models.IntegerField(default=0)
-    author = models.OneToOneField(User, on_delete=models.CASCADE)
+    # Связь «один к одному» с встроенной моделью пользователей User
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    # Рейтинг пользователя
+    rating = models.IntegerField(default=0, null=True, blank=True)
 
+    # Метод update_rating() модели Author, который обновляет рейтинг
+    # текущего автора (метод принимает в качестве аргумента только self)
     def update_rating(self):
-        sum_rating = self.post_set.aggregate(post_rating=Sum('post_rate'))
-        result_sum_rating = 0
-        try:
-            result_sum_rating += sum_rating.get('post_rating')
-        except TypeError:
-            result_sum_rating = 0
+        # Cуммарный рейтинг каждой статьи автора умножается на 3
+        posts_rating = self.post_set.aggregate(pr=Coalesce(Sum('rating'), 0)).get('pr')
+        # Cуммарный рейтинг всех комментариев автора
+        comments_rating = self.user.comment_set.aggregate(cr=Coalesce(Sum('rating'), 0)).get('cr')
+        # Суммарный рейтинг всех комментариев к статьям автора
+        posts_comments_rating = self.post_set.aggregate(pcr=Coalesce(Sum('rating'), 0)).get('pcr')
 
-        sum_comment_rating = self.author.comment_set.aggregate(comment_rating=Sum('comment_rate'))
-        result_sum_comment_rating = 0
-        result_sum_comment_rating += sum_comment_rating.get('comment_rating')
-
-        self.user_rate = result_sum_rating * 3 + result_sum_comment_rating
+        self.rating = posts_rating * 3 + comments_rating + posts_comments_rating
         self.save()
 
 
 class Category(models.Model):
-    article_category = models.CharField(max_length=255, unique=True)
+    # Категории новостей/статей
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name.title()
 
 
 class Post(models.Model):
-    post_author = models.ForeignKey(Author, on_delete=models.CASCADE)
-    post_category = models.ManyToManyField(Category)
-
-    article = 'A'
-    news = 'N'
-
-    POSITIONS = [
-        (article, "Статья"),
-        (news, "Новость"),
+    # выбор типа поста
+    article = 'AR'
+    news = 'NE'
+    POSTS = [
+        (article, 'Статья'),
+        (news, 'Новость')
     ]
+    # Cвязь «один ко многим» с моделью Author
+    author = models.ForeignKey(Author, on_delete=models.CASCADE)
+    # Поле с выбором — «статья» или «новость»
+    type = models.CharField(max_length=2, choices=POSTS, default=news)
+    # Автоматически добавляемые дата и время создания
+    created_date = models.DateTimeField(auto_now_add=True)
+    # Cвязь «многие ко многим» с моделью Category (с дополнительной моделью PostCategory)
+    post = models.ManyToManyField(Category, through="PostCategory")
+    # Заголовок статьи/новости
+    title = models.CharField(max_length=255)
+    # Текст статьи/новости
+    text = models.TextField()
+    # Рейтинг статьи/новости
+    rating = models.IntegerField(default=0)
 
-    category = models.CharField(max_length=1,
-                                choices=POSITIONS,
-                                default=news)
-
-    date_created = models.DateField(auto_now_add=True)
-
-    title = models.CharField(max_length=50)
-
-    content = models.TextField()
-
-    post_rate = models.IntegerField(default=0)
-
+    # Метод like, который увеличивает рейтинг поста на единицу
     def like(self):
-        self.post_rate += 1
+        self.rating += 1
         self.save()
 
+    # Метод dislike, который уменьшает рейтинг поста на единицу
     def dislike(self):
-        self.post_rate -= 1
+        self.rating -= 1
         self.save()
 
+    # Метод preview() модели Post, который возвращает начало статьи
+    # (предварительный просмотр) длиной 124 символа и добавляет
+    # многоточие в конце
     def preview(self):
-        return self.content[:125]
+        small_text = self.text[:124] + '...'
+        return small_text
 
     def __str__(self):
-        return f'{self.title.title()}: {self.content[:20]}'
+        return f'{self.title.title()}: {self.text[:20]}'
+
+    def get_absolute_url(self):
+        return reverse('separate_news', args=[str(self.id)])
 
 
 class PostCategory(models.Model):
-    post_category = models.ForeignKey(Post, on_delete=models.CASCADE)
-    category_category = models.ManyToManyField(Category)
+    # Связь «один ко многим» с моделью Post
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    # Связь «один ко многим» с моделью Category
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
 
 
 class Comment(models.Model):
-    comment_post = models.ForeignKey(Post, on_delete=models.CASCADE)
-    comment_user = models.ForeignKey(User, on_delete=models.CASCADE)
-    feedback_text = models.TextField()
-    comment_date_created = models.DateField(auto_now_add=True)
-    comment_rate = models.IntegerField(default=0)
+    # Связь «один ко многим» с моделью Post
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    # Связь «один ко многим» со встроенной моделью User
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # Текст комментария
+    text = models.TextField()
+    # Дата и время создания комментария
+    created_date = models.DateTimeField(auto_now_add=True)
+    # Рейтинг комментария
+    rating = models.IntegerField(default=0)
 
+    # Метод like, который увеличивает рейтинг комментария на единицу
     def like(self):
-        self.comment_rate += 1
+        self.rating += 1
         self.save()
 
+    # Метод dislike, который уменьшает рейтинг комментария на единицу
     def dislike(self):
-        self.comment_rate -= 1
+        self.rating -= 1
         self.save()

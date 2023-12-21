@@ -1,8 +1,6 @@
 from django import template
 
-
 register = template.Library()
-
 
 censor_filter = ['бля', 'идиот', 'придурок', 'дрянь']
 
